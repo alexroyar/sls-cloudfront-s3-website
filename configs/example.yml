@@ -1,0 +1,9 @@
+# WEBSITE CONFIGURATION
+WEBSITE_NAME: website-name
+BUCKET_NAME: website_name.eu-west-1.files
+CUSTOM_DOMAIN_NAME: website_name.com
+STAGE: development
+
+# AWS Configuration
+REGION: eu-west-3
+AWS_PROFILE: default

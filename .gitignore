@@ -1,0 +1,4 @@
+.serverless
+
+configs/*.yml
+!configs/example.yml

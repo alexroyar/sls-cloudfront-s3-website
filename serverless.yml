@@ -1,0 +1,117 @@
+service: website-${file(./configs/${opt:stage}.yml):WEBSITE_NAME}
+
+frameworkVersion: '3'
+
+provider:
+  name: aws
+  runtime: python3.11
+
+  region: ${file(./configs/${opt:stage}.yml):REGION}
+  stage: ${file(./configs/${opt:stage}.yml):STAGE}
+  profile: ${file(./configs/${opt:stage}.yml):AWS_PROFILE}
+
+  environment:
+    WEBSITE_NAME: ${file(./configs/${opt:stage}.yml):WEBSITE_NAME}
+    STAGE: ${file(./configs/${opt:stage}.yml):STAGE}
+
+    BUCKET_NAME: ${file(./configs/${opt:stage}.yml):BUCKET_NAME}
+    CUSTOM_DOMAIN_NAME: ${file(./configs/${opt:stage}.yml):CUSTOM_DOMAIN_NAME}
+
+    REGION: ${file(./configs/${opt:stage}.yml):REGION}
+    AWS_PROFILE: ${file(./configs/${opt:stage}.yml):AWS_PROFILE}
+
+resources:
+  Resources:
+    WebsiteFilesBucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: ${self:provider.environment.BUCKET_NAME}
+        Tags:
+          - Key: Name
+            Value: ${self:provider.environment.BUCKET_NAME}
+          - Key: Stage
+            Value: ${self:provider.environment.STAGE}
+          - Key: Service
+            Value: ${self:service}
+
+    S3BucketPolicy:
+      Type: AWS::S3::BucketPolicy
+      Properties:
+        Bucket: !Ref WebsiteFilesBucket
+        PolicyDocument:
+          Statement:
+            - Action: s3:GetObject
+              Effect: Allow
+              Resource:
+                - !Sub ${WebsiteFilesBucket.Arn}
+                - !Sub ${WebsiteFilesBucket.Arn}/*
+              Principal:
+                Service: cloudfront.amazonaws.com
+              Condition:
+                StringEquals:
+                  AWS:SourceArn: !Sub arn:aws:cloudfront::${AWS::AccountId}:distribution/${CloudFrontDistribution}
+
+    CloudFrontOriginAccessControl:
+      Type: AWS::CloudFront::OriginAccessControl
+      Properties: 
+        OriginAccessControlConfig:
+          Description: Default Origin Access Control
+          Name: OAC ${self:provider.environment.WEBSITE_NAME}
+          OriginAccessControlOriginType: s3
+          SigningBehavior: always
+          SigningProtocol: sigv4
+
+    CloudFrontDistribution:
+      Type: AWS::CloudFront::Distribution
+      Properties:
+        DistributionConfig:
+          Origins:
+            - Id: S3Origin
+              DomainName: !GetAtt WebsiteFilesBucket.RegionalDomainName
+              S3OriginConfig:
+                OriginAccessIdentity: ''
+              OriginAccessControlId: !GetAtt CloudFrontOriginAccessControl.Id
+
+          Enabled: true
+          Comment: ${self:provider.environment.WEBSITE_NAME} CloudFront distribution
+          DefaultRootObject: index.html
+
+          HttpVersion: http2
+
+          DefaultCacheBehavior:
+            Compress: true
+            AllowedMethods:
+              - GET
+              - HEAD
+              - OPTIONS
+            TargetOriginId: S3Origin
+            ViewerProtocolPolicy : redirect-to-https
+            OriginRequestPolicyId: 88a5eaf4-2fd4-4709-b370-b4c650ea3fcf
+            CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6
+
+        Tags:
+          - Key: Stage
+            Value: ${self:provider.environment.STAGE}
+          - Key: Service
+            Value: ${self:service}
+
+  Outputs:
+    Region:
+      Description: AWS Region
+      Value: ${self:provider.environment.REGION}
+
+    Stage:
+      Description: Stage deployed
+      Value: ${self:provider.environment.STAGE}
+
+    S3BucketName:
+      Description: S3 bucket name
+      Value: ${self:provider.environment.BUCKET_NAME}
+
+    CloudfrontDistributionId:
+      Description: Cloudfront Distribution Id
+      Value: !Ref CloudFrontDistribution
+
+    CloudfrontDistributionDomain:
+      Description: Cloudfront Distribution Domain
+      Value: !GetAtt CloudFrontDistribution.DomainName
